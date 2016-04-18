@@ -1,0 +1,233 @@
+local t = loadfile("libt")()
+  or error("Failed to load libt.")
+
+local world = {}
+
+world.CHUNK_SIZE = 8
+
+world.CHUNK_TYPE = {
+  UNEXPLORED = 1,
+  MINING = 2,
+  CLEARED = 3,
+  STORAGE = 4,
+  TREE_FARM = 5,
+  HOME = 6,
+}
+
+world.WORLD = {}
+
+world.FACING = {
+  SOUTH = 0,
+  WEST = 1,
+  NORTH = 2,
+  EAST = 3,
+}
+
+world.DIRECTION = {
+  SOUTH = 0,
+  WEST = 1,
+  NORTH = 2,
+  EAST = 3,
+  UP = 4,
+  DOWN = 6,
+}
+
+world.DIRVEC = {}
+world.DIRVEC[world.DIRECTION.SOUTH]
+  = {x = 0, y = 0, z = 1}
+world.DIRVEC[world.DIRECTION.NORTH]
+  = {x = 0, y = 0, z = -1}
+world.DIRVEC[world.DIRECTION.EAST]
+  = {x = 1, y = 0, z = 0}
+world.DIRVEC[world.DIRECTION.WEST]
+  = {x = -1, y = 0, z = 0}
+world.DIRVEC[world.DIRECTION.UP]
+  = {x = 0, y = 1, z = 0}
+world.DIRVEC[world.DIRECTION.DOWN]
+  = {x = 0, y = -1, z = 0}
+
+-- | Aligns a coordinate to the grid.
+function world.alignCoord(x)
+  return math.floor(x / world.CHUNK_SIZE)
+    * world.CHUNK_SIZE
+end
+
+function world.newCoords(x, y, z)
+  return {
+    x = x,
+    y = y,
+    z = z
+  }
+end
+
+-- | Creates an array of chunk offsets that
+-- represent a slice of a chunk. A slice is
+-- a two-dimensional subset of a chunk.
+-- The parameter k is a dictionary
+-- containing a key "x", "y", or "z" mapped
+-- to the value to fix that axis at.
+function world.sliceOffsets(k)
+  local mk = nil
+  if k.x ~= nil then
+    mk = function(i, j)
+      return {x = k.x, y = i, z = j}
+    end
+  elseif k.y ~= nil then
+    mk = function(i, j)
+      return {x = i, y = k.y, z = j}
+    end
+  elseif k.z ~= nil then
+    mk = function(i, j)
+      return {x = i, y = j, z = k.z}
+    end
+  else
+    error("invalid axis to fix for slice")
+  end
+
+  local coords = {}
+
+  for i=1,world.CHUNK_SIZE do
+    for j=1,world.CHUNK_SIZE do
+      table.insert(coords, mk(i, j))
+    end
+  end
+
+  return coords
+end
+
+world.ROAD_OFFSETS = (function()
+  local function mk(fix)
+    return t.arrayToSet(
+      world.sliceOffsets(fix)
+    )
+  end
+  return t.union(
+    mk({x = world.CHUNK_SIZE}),
+    mk({y = world.CHUNK_SIZE}),
+    mk({z = world.CHUNK_SIZE})
+  )
+end)()
+
+-- | Creates a new chunk at the given
+-- coordinates. The caller guarantees that
+-- these coordinates are aligned to the
+-- chunk grid.
+function world.newChunk(coords)
+  local chunk = {
+    coords = coords,
+    type = world.CHUNK_TYPE.UNEXPLORED,
+    contents = t.transformi3(
+      t.makeArray3(
+        world.CHUNK_SIZE,
+        world.CHUNK_SIZE,
+        world.CHUNK_SIZE
+      ),
+      world.newBlock
+    ),
+    objects = {}
+  }
+
+  function chunk.getBlock(coords)
+    return chunk.contents[c.x][c.y][c.z]
+  end
+
+  -- | Adds the given object to this chunk,
+  -- occupying the given list of
+  -- coordinates.
+  -- The blocks at those coordinates are
+  -- marked as having this object.
+  function chunk.addObject(coords, obj)
+    table.insert(chunk.objects, obj)
+    for c in t.from(coords) do
+      table.insert(chunk.getBlock(c).objects, obj)
+    end
+  end
+
+  return chunk
+end
+
+-- | Creates a new block with the given
+-- coordinates and whose properties are
+-- copied from an existing block. If the
+-- existing block is nil, then the new block
+-- is given unknown properties.
+function world.newBlock(x, y, z, copy)
+  local b = {
+    x = x,
+    y = y,
+    z = z,
+    objects = {}
+  }
+
+  if copy == nil then
+    b.properties = nil
+  else
+    b.properties = copy.properties
+  end
+
+  return b
+end
+
+-- | Returns the chunk containing the given
+-- point.
+function world.getChunk(x, y, z)
+  local
+    x_ = math.floor(x / world.CHUNK_SIZE),
+    y_ = math.floor(y / world.CHUNK_SIZE),
+    z_ = math.floor(z / world.CHUNK_SIZE),
+    chunk = world.WORLD[x_][y_][z_]
+
+  if chunk == nil then
+    chunk = world.newChunk(x_, y_, z_)
+    world[x_][y_][z_] = chunk
+  end
+
+  return chunk
+end
+
+-- | Gets the block at the given
+-- coordinates.
+function world.getBlock(x, y, z)
+  local chunk = world.getChunk(x, y, z)
+  return chunk.getBlock(
+    {
+      x = x - chunk.coords.x,
+      y = y - chunk.coords.y,
+      z = z - chunk.coords.z,
+    }
+  )
+end
+
+-- | Computes the component-wise sum of the
+-- two coordinate tables.
+function world.vadd(c1, c2)
+  return {
+    x = c1.x + c2.x,
+    y = c1.y + c2.y,
+    z = c1.z + c1.z,
+  }
+end
+
+-- | Computes a path to leave the chunk from
+-- the given position and the given facing.
+function world.pathfindLeaveChunk(x, y, z, f, p)
+
+  local c = world.newCoords(x, y, z)
+  local chunk = world.getChunk(x, y, z)
+  if p == nil then
+    p = {}
+  end
+
+  local visited = {}
+  visited[textutils.serialize(c)] = true
+
+  function loop()
+     
+  end
+
+  for d in t.ivalues(world.DIRECTION) do
+    local dv = world.DIRVEC[d]
+    
+
+    
+-- vim: ft=lua shiftwidth=2 expandtab tw=44
